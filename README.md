@@ -47,6 +47,26 @@ binary PDF parsing via `pypdf`), but all converge on the same `list[Document]` o
 contract — which is what makes every later step (splitting, embedding, storing)
 loader-agnostic.
 
+### 2026-06-27 — Step 2: Splitting into Chunks
+
+Goal: break `Document`s into smaller pieces sized for embedding models and LLM context
+windows, since retrieval quality drops if a chunk is too big (diluted embedding) or too
+small (lost context).
+
+- [step2_split_chunks.py](step2_split_chunks.py) — reuses the loaders from Step 1, then
+  splits with `RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)`, the
+  standard production default. It tries splitting on `"\n\n"` first, then `"\n"`, then
+  `" "`, falling back to raw characters only if needed — keeps chunks from cutting
+  mid-sentence when a good boundary exists.
+- `sample.txt` (1300 chars) → 2 chunks, split cleanly at the natural paragraph boundary.
+- `Info_Document.pdf` (26 page-`Document`s) → 76 chunks. Confirmed `split_documents()`
+  propagates each source `Document`'s metadata (`page`, `page_label`, ...) onto every
+  chunk derived from it — multiple chunks can share the same `page` value, which is what
+  preserves page-level traceability for later citations.
+- Noticed the PDF's table-of-contents dot-leaders (`"3 Terms and definitions ... 1"`) get
+  extracted as literal flowing text — a real-world artifact that will produce noisy,
+  low-value chunks once embedded. Not fixed yet, just noted.
+
 ## Next
 
-- Step 2: Splitting documents into chunks (`langchain_text_splitters`).
+- Step 3: Embedding chunks into vectors.
