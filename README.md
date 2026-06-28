@@ -14,6 +14,7 @@ stage instead of just calling a high-level chain.
 - [Progress Log](#progress-log)
   - [Step 1 — Document Loading](#step-1--document-loading)
   - [Step 2 — Splitting into Chunks](#step-2--splitting-into-chunks)
+  - [Step 3 — Embedding Chunks](#step-3--embedding-chunks)
 
 ## Architecture
 
@@ -31,8 +32,8 @@ User Query → Embed Query → Similarity Search → Retrieve Top K Chunks
 |---|------------------------|--------|--------------------------------------------------------|
 | 1 | Document Loading       | ✅ Done | [step1_load_documents.py](step1_load_documents.py), [step1_load_pdf.py](step1_load_pdf.py) |
 | 2 | Splitting into Chunks  | ✅ Done | [step2_split_chunks.py](step2_split_chunks.py)          |
-| 3 | Embedding Chunks       | ⬜ Next | —                                                        |
-| 4 | Storing in a Vector DB | ⬜ Todo | —                                                        |
+| 3 | Embedding Chunks       | ✅ Done | [step3_embed_chunks.py](step3_embed_chunks.py)          |
+| 4 | Storing in a Vector DB | ⬜ Next | —                                                        |
 | 5 | Query Embedding + Similarity Search | ⬜ Todo | —                                          |
 | 6 | LLM Answer Generation  | ⬜ Todo | —                                                        |
 
@@ -41,6 +42,8 @@ User Query → Embed Query → Similarity Search → Retrieve Top K Chunks
 - **Language:** Python 3.12, managed with [`uv`](https://docs.astral.sh/uv/)
 - **Framework:** `langchain`, `langchain-community`, `langchain-text-splitters`
 - **PDF parsing:** `pypdf`
+- **Embeddings:** `sentence-transformers` / `langchain-huggingface`, local model
+  `all-MiniLM-L6-v2` (loaded from disk, see Step 3 below)
 
 ## Project Structure
 
@@ -52,6 +55,9 @@ RAG-Architecture/
 ├── step1_load_documents.py     # TextLoader -> list[Document]
 ├── step1_load_pdf.py           # PyPDFLoader -> list[Document] (one per page)
 ├── step2_split_chunks.py       # RecursiveCharacterTextSplitter -> list[Document] chunks
+├── step3_embed_chunks.py       # HuggingFaceEmbeddings -> vectors + cosine similarity demo
+├── models/                     # local embedding model weights (gitignored, see Step 3)
+│   └── all-MiniLM-L6-v2/
 └── README.md
 ```
 
@@ -61,6 +67,7 @@ RAG-Architecture/
 uv run step1_load_documents.py   # load the sample .txt file
 uv run step1_load_pdf.py         # load the sample PDF, one Document per page
 uv run step2_split_chunks.py     # load + split both into chunks
+uv run step3_embed_chunks.py     # split + embed chunks, compare to a query via cosine similarity
 ```
 
 ---
@@ -125,7 +132,57 @@ context windows — too big dilutes the embedding, too small loses context.
   extracted as literal flowing text — a real-world artifact that will produce noisy,
   low-value chunks once embedded. Noted, not fixed yet.
 
+### Step 3 — Embedding Chunks
+*2026-06-28*
+
+**Goal:** convert each chunk's text into a vector that captures its semantic meaning,
+so semantically similar chunks land near each other in vector space — the property
+similarity search (Step 5) relies on.
+
+**What we did**
+- Chose a local model over an API: `sentence-transformers/all-MiniLM-L6-v2` (384-dim,
+  fast, no API key) via `langchain_huggingface.HuggingFaceEmbeddings`.
+- Built [step3_embed_chunks.py](step3_embed_chunks.py): embeds `sample.txt`'s chunks,
+  embeds a test query, and ranks chunks by cosine similarity to the query — a preview of
+  what Step 5 (similarity search) will do for real against a vector DB.
+
+**A real debugging detour**
+Installing `sentence-transformers` + `langchain-huggingface` worked, but actually loading
+the model crashed the Python process with `OPENSSL_Uplink ... no OPENSSL_Applink` — a
+low-level OpenSSL/CRT linkage crash, not a normal Python exception. Diagnosed step by step:
+- First suspected `hf-xet` (HuggingFace's Rust-based fast-download accelerator, known to
+  statically link its own OpenSSL on Windows) — excluded it via
+  `[tool.uv] override-dependencies` in [pyproject.toml](pyproject.toml). Crash persisted.
+- Proved it wasn't HuggingFace-specific at all: even a bare `urllib.request.urlopen(...)`
+  to any HTTPS URL crashed the same way. So it's this machine's Python/OpenSSL build
+  conflicting with something in the network stack (most likely security/proxy software
+  injecting its own TLS layer into the process) on **any** outgoing HTTPS call from Python.
+- Tried `truststore` (delegates cert verification to the OS trust store) — didn't help
+  either, confirming this isn't a certificate-trust problem, it's lower-level than that.
+- `uv` itself only worked earlier with `--native-tls` (bypasses Python's OpenSSL
+  entirely), and PowerShell's `Invoke-WebRequest` (.NET/schannel) downloaded files fine —
+  so the network path is fine, it's specifically Python's HTTPS stack on this machine.
+
+**The fix:** sidestep Python networking for the download entirely. Downloaded the model's
+files directly via PowerShell into [models/all-MiniLM-L6-v2/](models/all-MiniLM-L6-v2/)
+(config, tokenizer, `model.safetensors`, pooling config), then pointed
+`HuggingFaceEmbeddings(model_name="./models/all-MiniLM-L6-v2")` at the local folder —
+`sentence-transformers` loads and runs entirely offline once the weights are on disk, so
+no Python HTTPS call is needed at all. Added `models/` to `.gitignore` (binary weights,
+shouldn't be committed).
+
+**Results** (query: *"How does RAG reduce hallucination?"*)
+- chunk 0 (explicitly discusses hallucination/up-to-date knowledge): **0.2587** similarity
+- chunk 1 (the "how retrieval works" mechanics paragraph): **0.1563** similarity
+- Confirms the embeddings actually capture semantic relevance, not just keyword overlap.
+
+> **Takeaway:** not every blocker is a code bug — this one was an environment/network
+> issue beneath LangChain entirely. The fix was to remove Python's networking from the
+> equation rather than chase the crash further once two independent libraries
+> (`truststore`, dependency exclusion) failed to resolve it.
+
 ## Next
 
-**Step 3 — Embedding Chunks**: convert each chunk's text into a vector using an
-embedding model, as the input to Step 4 (storing in a vector DB).
+**Step 4 — Storing in a Vector DB**: persist the chunk embeddings (with their metadata)
+in a vector store, so we can run real similarity search instead of the manual cosine-
+similarity loop from Step 3.

@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(uv add *)",
-      "Bash(uv run *)"
+      "Bash(uv run *)",
+      "Bash(PYTHONUNBUFFERED=1 uv run python -u -c ' *)",
+      "Bash(echo \"EXIT=$?\")",
+      "PowerShell(Invoke-WebRequest -Uri \"https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/config.json\" -OutFile \"test_config.json\" -UseBasicParsing)",
+      "Bash(uv sync *)"
     ]
   }
 }
