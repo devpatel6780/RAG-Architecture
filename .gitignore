@@ -11,3 +11,6 @@ wheels/
 
 # Downloaded model weights (fetched manually, see README Step 3)
 models/
+
+# Generated vector store (rebuilt by step4_vector_store.py)
+chroma_db/

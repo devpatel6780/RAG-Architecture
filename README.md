@@ -33,8 +33,8 @@ User Query → Embed Query → Similarity Search → Retrieve Top K Chunks
 | 1 | Document Loading       | ✅ Done | [step1_load_documents.py](step1_load_documents.py), [step1_load_pdf.py](step1_load_pdf.py) |
 | 2 | Splitting into Chunks  | ✅ Done | [step2_split_chunks.py](step2_split_chunks.py)          |
 | 3 | Embedding Chunks       | ✅ Done | [step3_embed_chunks.py](step3_embed_chunks.py)          |
-| 4 | Storing in a Vector DB | ⬜ Next | —                                                        |
-| 5 | Query Embedding + Similarity Search | ⬜ Todo | —                                          |
+| 4 | Storing in a Vector DB | ✅ Done | [step4_vector_store.py](step4_vector_store.py)          |
+| 5 | Query Embedding + Similarity Search | ⬜ Next | —                                          |
 | 6 | LLM Answer Generation  | ⬜ Todo | —                                                        |
 
 ## Tech Stack
@@ -44,6 +44,7 @@ User Query → Embed Query → Similarity Search → Retrieve Top K Chunks
 - **PDF parsing:** `pypdf`
 - **Embeddings:** `sentence-transformers` / `langchain-huggingface`, local model
   `all-MiniLM-L6-v2` (loaded from disk, see Step 3 below)
+- **Vector Store:** `chromadb` / `langchain-chroma`, persists to `chroma_db/` (gitignored)
 
 ## Project Structure
 
@@ -56,8 +57,10 @@ RAG-Architecture/
 ├── step1_load_pdf.py           # PyPDFLoader -> list[Document] (one per page)
 ├── step2_split_chunks.py       # RecursiveCharacterTextSplitter -> list[Document] chunks
 ├── step3_embed_chunks.py       # HuggingFaceEmbeddings -> vectors + cosine similarity demo
+├── step4_vector_store.py       # embeds + stores all chunks into Chroma, peeks inside
 ├── models/                     # local embedding model weights (gitignored, see Step 3)
 │   └── all-MiniLM-L6-v2/
+├── chroma_db/                  # persisted Chroma vector store (gitignored, rebuilt by step4)
 └── README.md
 ```
 
@@ -68,6 +71,7 @@ uv run step1_load_documents.py   # load the sample .txt file
 uv run step1_load_pdf.py         # load the sample PDF, one Document per page
 uv run step2_split_chunks.py     # load + split both into chunks
 uv run step3_embed_chunks.py     # split + embed chunks, compare to a query via cosine similarity
+uv run step4_vector_store.py    # embed + persist all chunks into a Chroma vector store on disk
 ```
 
 ---
@@ -183,6 +187,35 @@ shouldn't be committed).
 
 ## Next
 
-**Step 4 — Storing in a Vector DB**: persist the chunk embeddings (with their metadata)
-in a vector store, so we can run real similarity search instead of the manual cosine-
-similarity loop from Step 3.
+### Step 4 — Storing in a Vector DB
+*2026-06-29*
+
+**Goal:** persist the chunk embeddings into a searchable index so we can query across all
+chunks at once, instead of the manual cosine-similarity loop from Step 3.
+
+**What we did**
+- Installed `langchain-chroma` (brings in `chromadb`).
+- Built [step4_vector_store.py](step4_vector_store.py): loads + splits both documents,
+  embeds all 78 chunks via the local `all-MiniLM-L6-v2` model, then calls
+  `Chroma.from_documents()` to embed and persist everything to `./chroma_db/`.
+- Used `collection.peek()` to read back the raw stored data — text, metadata, vector —
+  directly from the underlying `chromadb` collection.
+
+**What's actually on disk (`chroma_db/`)**
+- `chroma.sqlite3` — SQLite database storing raw chunk text, metadata, and UUIDs. This
+  is what lets Chroma return full `Document` objects after a search.
+- `<uuid>/data_level0.bin` — the flat binary file of all 384-dim vectors.
+- `<uuid>/link_lists.bin` + `header.bin` + `length.bin` — the **HNSW graph** (Hierarchical
+  Navigable Small World), Chroma's ANN index. Instead of comparing your query vector to
+  every stored vector, HNSW navigates a pre-built graph of "neighbor" links to find the
+  nearest vectors in sub-linear time.
+
+**How the two stores are linked:** `Chroma.from_documents()` generates a random UUID per
+chunk, writes `(UUID → text, metadata)` into SQLite and `(UUID → vector)` into HNSW. At
+query time: HNSW returns the nearest UUIDs → SQLite looks up the text for those UUIDs.
+
+## Next
+
+**Step 5 — Query Embedding + Similarity Search**: embed a user query and run
+`vector_store.similarity_search()` against the persisted Chroma store to retrieve the
+most relevant chunks.
