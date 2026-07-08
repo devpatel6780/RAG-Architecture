@@ -82,7 +82,7 @@ from whatever it memorised during training.
 | 3 | Embedding Chunks | ✅ Done | [step3_embed_chunks.py](step3_embed_chunks.py) |
 | 4 | Storing in a Vector DB | ✅ Done | [step4_vector_store.py](step4_vector_store.py) |
 | 5 | Query & Similarity Search | ✅ Done | [step5_similarity_search.py](step5_similarity_search.py) |
-| 6 | LLM Answer Generation | ⬜ Next | — |
+| 6 | LLM Answer Generation | ✅ Done | [step6_llm_answer.py](step6_llm_answer.py) |
 
 ---
 
@@ -96,6 +96,7 @@ from whatever it memorised during training.
 | Embeddings | `sentence-transformers`, `langchain-huggingface` | Local model, no API key needed |
 | Embedding model | `all-MiniLM-L6-v2` | 384-dim vectors, ~90 MB, loaded from disk |
 | Vector store | `chromadb`, `langchain-chroma` | Persists to `chroma_db/` (SQLite + HNSW) |
+| LLM | [Ollama](https://ollama.com) (`qwen3:1.7b`) | Local server; called via stdlib `http.client`, no SDK |
 
 ---
 
@@ -130,6 +131,7 @@ RAG-Architecture/
 ├── step3_embed_chunks.py           # HuggingFaceEmbeddings  →  vectors + cosine demo
 ├── step4_vector_store.py           # Chroma.from_documents()  →  persisted index
 ├── step5_similarity_search.py      # similarity_search_with_score()  →  top-K chunks
+├── step6_llm_answer.py             # http.client → local Ollama  →  grounded answer
 │
 ├── pyproject.toml
 └── README.md
@@ -158,6 +160,7 @@ uv run step2_split_chunks.py        # Split all documents → 78 chunks
 uv run step3_embed_chunks.py        # Embed chunks, preview cosine similarity vs a query
 uv run step4_vector_store.py        # Embed + persist all 78 chunks into Chroma
 uv run step5_similarity_search.py   # Query Chroma, retrieve top-3 chunks per question
+uv run step6_llm_answer.py          # Retrieve + generate grounded answers via local Ollama
 ```
 
 > **Note:** Run `step4_vector_store.py` before `step5_similarity_search.py` — Step 5
@@ -482,7 +485,7 @@ those chunks into a prompt and call an LLM.
 ---
 
 ### Step 6 — LLM Answer Generation
-`⬜ Up next`
+`2026-07-08`
 
 **Goal:** Pass the top-K retrieved chunks + the original question to a language model.
 The model generates an answer grounded in the retrieved context rather than from memory.
@@ -494,3 +497,50 @@ Question + [Chunk 1 text] + [Chunk 2 text] + [Chunk 3 text]
                         ↓
               Grounded, cited answer
 ```
+
+#### Choosing an LLM
+
+Cloud LLM APIs need HTTPS, and Python HTTPS is broken on this machine (see Step 3). The
+local fix: [Ollama](https://ollama.com) was already installed with `qwen3:1.7b` pulled,
+serving on `http://localhost:11434` — plain local HTTP, no API key, no TLS.
+
+#### A second, deeper HTTPS-crash detour
+
+Plain local HTTP turned out not to be automatically safe. Bisecting the crash chain:
+
+1. `langchain-ollama` (which wraps the `ollama` PyPI package) crashed with the same
+   `OPENSSL_Uplink` error from Step 3 — **on import alone**, before any request was made.
+   Traced to `ollama._types` (which pulls in `pydantic`'s compiled core).
+2. Suspected it was TLS-specific per Step 3's diagnosis, so tried stdlib
+   `urllib.request.urlopen("http://localhost:11434/...")` — a plain HTTP URL, no TLS.
+   **Still crashed.**
+3. Dropped to a raw `socket.socket()` connection, manually writing the HTTP request bytes
+   — **worked**. This proved the crash isn't about networking or TLS at all; it's specific
+   to whatever `urllib.request` (and libraries built on it/`httpx`/`requests`) touches
+   internally.
+4. Tried stdlib `http.client.HTTPConnection` directly (one layer above raw sockets, one
+   layer below `urllib.request`) — **worked**, for both GET and POST with a JSON body.
+
+**Fix:** `step6_llm_answer.py` calls Ollama's REST API (`POST /api/generate`) using only
+`http.client` + `json` from the standard library — no `ollama` package, no
+`langchain-ollama`, no `urllib`/`requests`/`httpx` anywhere in the call path.
+
+> **Key insight:** the earlier assumption ("it's an HTTPS problem") was too narrow. The
+> actual boundary is *which HTTP client implementation is used*, not *which URL scheme*.
+> When a workaround is based on a diagnosis, re-test the diagnosis itself before trusting
+> it in a new context — `http://` was not actually safe by default here.
+
+#### Results
+
+All three test queries from Step 5 now produce grounded, cited answers, e.g.:
+
+**Query: "What is screening of personnel?"**
+
+> The screening of personnel refers to background verification checks conducted on all
+> candidates prior to joining the organization and on an ongoing basis, considering
+> applicable laws, regulations, ethics, and business requirements, classification of
+> information, and perceived risks.
+
+Sourced from `Info_Document.pdf p.19` (score 0.9930) — matching Step 5's top retrieval
+result, confirming the LLM is answering from the retrieved context rather than training
+memory.
