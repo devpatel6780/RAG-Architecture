@@ -2,7 +2,27 @@
 
 > A step-by-step implementation of a full Retrieval-Augmented Generation pipeline using
 > LangChain — reading the library source at each stage to understand what's actually
-> happening, instead of just calling a high-level chain.
+> happening, instead of just calling a high-level chain. Now extended with an evaluation
+> harness to prove retrieval quality with real numbers, not eyeballed examples.
+
+---
+
+## Project Status
+
+**Part 1 — Core RAG pipeline: ✅ done.** Steps 1–6 plus a Streamlit UI were built, then
+re-verified end-to-end against fresh, never-before-seen questions — including a deliberate
+out-of-scope question ("What is the capital of France?") that the LLM correctly refused to
+answer instead of hallucinating. This is the stable foundation the rest of the project builds on.
+
+**Part 2 — Evaluation harness: 🚧 in progress.** A hand-eyeballed "it works" isn't the same as
+"it's regression-safe." The project's focus has shifted to proving retrieval quality with
+repeatable metrics: [`eval/`](eval/) now runs 21 golden questions through the real pipeline and
+scores **Hit@1 = 0.76, Hit@3 = 0.90, Hit@5 = 0.95, MRR = 0.83** — see [Evaluation](#evaluation)
+for the full breakdown, including one documented retrieval weakness kept intentionally as a
+known miss rather than hidden.
+
+**Not yet started:** LLM-as-judge answer-quality scoring, CI integration, a UI redesign, and a
+decision on where this gets published.
 
 ---
 
@@ -21,6 +41,7 @@
   - [Step 4 — Storing in a Vector DB](#step-4--storing-in-a-vector-db)
   - [Step 5 — Query & Similarity Search](#step-5--query--similarity-search)
   - [Step 6 — LLM Answer Generation](#step-6--llm-answer-generation)
+- [Evaluation](#evaluation)
 
 ---
 
@@ -83,6 +104,7 @@ from whatever it memorised during training.
 | 4 | Storing in a Vector DB | ✅ Done | [step4_vector_store.py](step4_vector_store.py) |
 | 5 | Query & Similarity Search | ✅ Done | [step5_similarity_search.py](step5_similarity_search.py) |
 | 6 | LLM Answer Generation | ✅ Done | [step6_llm_answer.py](step6_llm_answer.py) |
+| 7 | Evaluation Harness | ✅ Done | [eval/run_eval.py](eval/run_eval.py), [eval/compare.py](eval/compare.py) |
 
 ---
 
@@ -132,6 +154,13 @@ RAG-Architecture/
 ├── step4_vector_store.py           # Chroma.from_documents()  →  persisted index
 ├── step5_similarity_search.py      # similarity_search_with_score()  →  top-K chunks
 ├── step6_llm_answer.py             # http.client → local Ollama  →  grounded answer
+│
+├── eval/                           # Retrieval-quality regression harness (no new deps)
+│   ├── golden_set.json             # question → expected source/page pairs, hand-curated
+│   ├── metrics.py                  # Hit@k, MRR
+│   ├── run_eval.py                 # runs golden set, writes a timestamped snapshot
+│   ├── compare.py                  # diffs two snapshots, flags regressions
+│   └── results/                    # gitignored — snapshots from run_eval.py
 │
 ├── pyproject.toml
 └── README.md
@@ -544,3 +573,89 @@ All three test queries from Step 5 now produce grounded, cited answers, e.g.:
 Sourced from `Info_Document.pdf p.19` (score 0.9930) — matching Step 5's top retrieval
 result, confirming the LLM is answering from the retrieved context rather than training
 memory.
+
+---
+
+## Evaluation
+
+`2026-07-08`
+
+**Goal:** Steps 1–6 were verified by hand — running each script and eyeballing the answers.
+That proves the happy path works once, but it's not repeatable, and it gives no way to catch
+a regression when chunk size, `k`, or the embedding model changes later. `eval/` is a small
+regression harness on top of the existing pipeline: a hand-curated set of questions with known
+correct sources, run automatically, scored, and snapshotted for before/after comparison.
+
+This is retrieval-quality scoring only — Hit@k and MRR. No LLM-judge / faithfulness scoring
+yet: the only local model available (`qwen3:1.7b`) would be judging its own generated answers,
+which is a well-known bias problem, so that's deliberately deferred to a later phase. No new
+dependencies were added — `json`, `pathlib`, `datetime`, and `argparse` are all standard library.
+
+#### Golden set schema (`eval/golden_set.json`)
+
+```json
+[
+  {
+    "id": "screening-of-personnel",
+    "question": "What is screening of personnel?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 19,
+    "notes": "Verified 2026-07-08: top hit is Info_Document.pdf page=19, L2 score 0.9930"
+  }
+]
+```
+
+`expected_source` must exactly match `doc.metadata.get("source")`. `expected_page` is
+0-indexed (matches `doc.metadata.get("page")`, not the printed page label) and must be `null`
+for `data/sample.txt` questions, since `TextLoader` never adds a `page` key. `id` is optional —
+it lets `compare.py` track the same question across runs even if the wording changes later.
+
+#### Metrics
+
+For each question, one `search(vector_store, question, k=5)` call finds the rank of the first
+chunk matching `expected_source`/`expected_page` (or `None` if it's not in the top 5). Every
+metric below is derived from that single `rank`, no repeated queries:
+
+- **Hit@1 / Hit@3 / Hit@5** — did the right chunk appear within the top 1 / 3 / 5 results?
+- **MRR** (Mean Reciprocal Rank) — average of `1/rank` across all questions; rewards the right
+  answer landing *higher*, not just somewhere in the top-k.
+
+#### Running it
+
+```bash
+# must use -m — plain `uv run eval/run_eval.py` breaks the step5 import (see CLAUDE.md)
+uv run python -m eval.run_eval
+
+# compare two snapshots — flags any metric that regressed past --threshold (default 0.0)
+uv run python -m eval.compare eval/results/<baseline>.json eval/results/<candidate>.json
+```
+
+Each run writes a timestamped snapshot to `eval/results/` (gitignored — generated output,
+same category as `chroma_db/`). `compare.py` diffs two snapshots' aggregate metrics and lists
+exactly which questions flipped `HIT → MISS`, and exits non-zero on regression — usable as a
+CI gate later even though no CI exists yet.
+
+#### Baseline results (21 questions)
+
+Every candidate question's `expected_page` was checked against the live vector store before
+being committed to the golden set — not just assumed from reading the PDF. That caught real
+mistakes before they could quietly poison the harness (see below).
+
+| Metric | Score |
+|--------|-------|
+| Hit@1  | 0.76  |
+| Hit@3  | 0.90  |
+| Hit@5  | 0.95  |
+| MRR    | 0.83  |
+
+| Finding | Result | Why it matters |
+|---------|--------|-----------------|
+| "Classification of information" (Annex A 5.12) | **MISS** | Confirmed genuine — the clause really is on that page (checked the stored chunk directly), but that page packs 4-5 short Annex A controls into a few dense chunks, likely diluting the embedding. Kept as an intentional known miss, not fixed by rewording. |
+| "Operational planning and control" (8.1) | Hit@3 | An abstractly-worded version of this question missed entirely; phrasing closer to the source clause resolves at rank 3. |
+| "Secure authentication" (8.5) | Hit@5 | Same pattern — barely resolves even with close phrasing. A tripwire worth watching if it regresses further. |
+| Background-verification paraphrase | Hit@1 | Reworded with no shared vocabulary with the original screening question — still resolves at rank 1, real evidence the embeddings generalize semantically rather than pattern-matching keywords. |
+
+> **What this doesn't cover yet:** whether the *generated answer* is faithful to the retrieved
+> context — that needs an LLM-as-judge, and judging qwen3:1.7b's answers with qwen3:1.7b itself
+> has a known self-preference bias. Left as a future phase, likely requiring a second, different
+> local judge model.

@@ -1,0 +1,149 @@
+[
+  {
+    "id": "screening-of-personnel",
+    "question": "What is screening of personnel?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 19,
+    "notes": "Verified 2026-07-08: top hit is Info_Document.pdf page=19, L2 score 0.9930"
+  },
+  {
+    "id": "rag-definition",
+    "question": "What is Retrieval-Augmented Generation (RAG)?",
+    "expected_source": "data/sample.txt",
+    "expected_page": null,
+    "notes": "Verified: hit at rank 1, score 0.5139"
+  },
+  {
+    "id": "rag-retrieval-mechanics",
+    "question": "How does a RAG system find the most relevant chunks for a user's question?",
+    "expected_source": "data/sample.txt",
+    "expected_page": null,
+    "notes": "Verified: hit at rank 1, score 0.7567"
+  },
+  {
+    "id": "isms-requirements",
+    "question": "What are the requirements for an ISMS?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 6,
+    "notes": "Section 1 Scope. Verified: hit at rank 1, score 1.1415"
+  },
+  {
+    "id": "determining-scope-isms",
+    "question": "What must an organization consider when determining the scope of its information security management system?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 7,
+    "notes": "Clause 4.3. Verified: hit at rank 1, score 0.5705"
+  },
+  {
+    "id": "information-security-policy",
+    "question": "What must top management include when establishing an information security policy?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 8,
+    "notes": "Clause 5.2 Policy. Verified: hit at rank 1, score 0.4440"
+  },
+  {
+    "id": "risk-assessment-process",
+    "question": "What must an information security risk assessment process do?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 9,
+    "notes": "Clause 6.1.2. Verified: hit at rank 1, score 0.4649"
+  },
+  {
+    "id": "resources-and-competence",
+    "question": "What resources and competence must an organization ensure for its ISMS?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 11,
+    "notes": "Clause 7.1/7.2. Verified: hit at rank 1, score 0.9680"
+  },
+  {
+    "id": "operational-planning-control",
+    "question": "How does the organization control planned changes and review the consequences of unintended changes?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 13,
+    "notes": "Clause 8.1. Near-miss case: a more abstract phrasing of this question missed entirely (page 10, an adjacent risk-treatment clause, was retrieved instead); this closer phrasing hits at rank 3, score 1.1260."
+  },
+  {
+    "id": "internal-audit-programme",
+    "question": "What must an organization's internal audit programme establish?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 14,
+    "notes": "Clause 9.2.2. Verified: hit at rank 1, score 0.6039"
+  },
+  {
+    "id": "continual-improvement",
+    "question": "What does continual improvement of the ISMS require?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 15,
+    "notes": "Clause 10.1. Verified: hit at rank 2 (rank 1 was the table-of-contents page, a known noisy chunk per README Step 1 gotchas)."
+  },
+  {
+    "id": "annex-a-controls-reference",
+    "question": "Where do the information security controls in Annex A come from?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 16,
+    "notes": "Annex A intro. Verified: hit at rank 2."
+  },
+  {
+    "id": "classification-of-information",
+    "question": "How should information be classified based on confidentiality, integrity and availability?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 17,
+    "notes": "Clause 5.12. KNOWN MISS as of 2026-07-08 (not in top 5 even with near-verbatim clause phrasing) - confirmed via direct chunk inspection that page 17 does contain this exact clause, so this is a genuine retrieval weakness, not a golden-set error. Page 17 is unusually dense (4 chunks covering controls 5.12-5.24 back to back), likely diluting embedding focus. Kept intentionally as a tracked hard case."
+  },
+  {
+    "id": "assessment-security-events",
+    "question": "How should an organization assess and decide on information security events?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 18,
+    "notes": "Clause 5.25. Verified: hit at rank 1, score 0.7552"
+  },
+  {
+    "id": "disciplinary-process",
+    "question": "What does a disciplinary process control involve?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 19,
+    "notes": "Clause 6.4. Verified: hit at rank 1, score 0.9146"
+  },
+  {
+    "id": "termination-responsibilities",
+    "question": "What security responsibilities remain after an employee's termination or change of role?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 19,
+    "notes": "Clause 6.5. Verified: hit at rank 1, score 0.8182"
+  },
+  {
+    "id": "physical-environmental-threats",
+    "question": "What controls does ISO 27001 require for protecting against physical and environmental threats?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 20,
+    "notes": "Clause 7.5. Verified: hit at rank 1, score 0.7528 - the strongest match observed across manual testing this session."
+  },
+  {
+    "id": "secure-authentication",
+    "question": "What secure authentication technologies and procedures should be implemented based on information access restrictions?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 21,
+    "notes": "Clause 8.5. Near-miss case: a more abstract phrasing of this question missed entirely; this closer phrasing barely hits at rank 5, score 1.0034 - a Hit@5-only case worth watching for regression."
+  },
+  {
+    "id": "privileged-utility-programs",
+    "question": "How should the use of privileged utility programs be restricted?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 22,
+    "notes": "Clause 8.18. Verified: hit at rank 1, score 1.1454"
+  },
+  {
+    "id": "audit-testing-protection",
+    "question": "How should information systems be protected during audit testing?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 23,
+    "notes": "Clause 8.34. Verified: hit at rank 1, score 0.6865"
+  },
+  {
+    "id": "background-verification-paraphrase",
+    "question": "What is required for background verification of new employees before they join an organization?",
+    "expected_source": "data/Info_Document.pdf",
+    "expected_page": 19,
+    "notes": "Paraphrase of the screening-of-personnel question, using none of its exact wording. Verified: hit at rank 1, score 1.1571 - tests semantic generalization beyond keyword overlap."
+  }
+]
