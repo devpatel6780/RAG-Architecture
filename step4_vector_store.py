@@ -50,7 +50,7 @@ def main():
     safe_print(f"Documents stored in collection: {collection.count()}")
 
     peek = collection.peek(limit=2)
-    safe_print(f"\nPeek at first 2 entries:")
+    safe_print("\nPeek at first 2 entries:")
     for i in range(len(peek["ids"])):
         safe_print(f"\n  id       : {peek['ids'][i]}")
         safe_print(f"  text     : {peek['documents'][i][:120].replace(chr(10), ' ')} ...")

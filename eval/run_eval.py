@@ -10,7 +10,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from step5_similarity_search import MODEL_PATH, PERSIST_DIR, load_vector_store, search
 
 from eval.judge import JUDGE_LIMITATION, JUDGE_MODEL, aggregate_judge, judge_answer
-from eval.metrics import K_MAX, aggregate, find_rank, hit_at_k, is_relevant, reciprocal_rank
+from eval.metrics import K_MAX, aggregate, find_rank, hit_at_k, reciprocal_rank
 
 EVAL_DIR = Path(__file__).parent
 GOLDEN_SET_PATH = EVAL_DIR / "golden_set.json"
