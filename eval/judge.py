@@ -1,3 +1,6 @@
+import json
+import re
+
 from step6_llm_answer import OLLAMA_MODEL, call_ollama
 
 JUDGE_MODEL = OLLAMA_MODEL
@@ -26,3 +29,13 @@ JUDGE_LIMITATION = (
     "Scores may reflect self-consistency bias rather than independent correctness; "
     "treat as a regression-detection signal, not ground truth."
 )
+
+
+def parse_judge_response(raw_text):
+    match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+    if not match:
+        raise ValueError(f"No JSON object found in judge response: {raw_text!r}")
+    data = json.loads(match.group(0))
+    for axis in ("faithfulness", "relevance", "completeness"):
+        data[axis] = max(1, min(5, int(data[axis])))
+    return data
