@@ -21,8 +21,10 @@ scores **Hit@1 = 0.76, Hit@3 = 0.90, Hit@5 = 0.95, MRR = 0.83** — see [Evaluat
 for the full breakdown, including one documented retrieval weakness kept intentionally as a
 known miss rather than hidden.
 
-**Not yet started:** LLM-as-judge answer-quality scoring, CI integration, a UI redesign, and a
-decision on where this gets published.
+**Done since:** LLM-as-judge answer-quality scoring (`eval/judge.py`, `run_eval.py --judge`) —
+see [Evaluation](#evaluation) for scores and the self-judging caveat.
+
+**Not yet started:** CI integration, a UI redesign, and a decision on where this gets published.
 
 ---
 
@@ -655,7 +657,30 @@ mistakes before they could quietly poison the harness (see below).
 | "Secure authentication" (8.5) | Hit@5 | Same pattern — barely resolves even with close phrasing. A tripwire worth watching if it regresses further. |
 | Background-verification paraphrase | Hit@1 | Reworded with no shared vocabulary with the original screening question — still resolves at rank 1, real evidence the embeddings generalize semantically rather than pattern-matching keywords. |
 
-> **What this doesn't cover yet:** whether the *generated answer* is faithful to the retrieved
-> context — that needs an LLM-as-judge, and judging qwen3:1.7b's answers with qwen3:1.7b itself
-> has a known self-preference bias. Left as a future phase, likely requiring a second, different
-> local judge model.
+#### LLM-as-judge answer-quality scoring
+
+`eval/run_eval.py --judge` additionally calls `generate_answer()` per question and scores the
+answer with `eval/judge.py` on three axes (1-5): **faithfulness** (no fabrication beyond the
+retrieved context), **relevance** (addresses the question), **completeness** (uses what the
+context actually supports). Scoring is reference-free — judged from context + question + answer
+only, no hand-written reference answers, so `golden_set.json`'s schema didn't need to change.
+
+The judge is `qwen3:1.7b` — the same model that generates the answers, since it's the only chat
+model pulled locally. That means scores reflect self-consistency rather than independent
+correctness; this caveat is printed alongside every judge report and stored as
+`judge_limitation` in each snapshot so it can never be read apart from the numbers. Treat judge
+scores as a regression-detection signal, not ground truth — `compare.py` reports judge-score
+deltas as informational only and never gates the exit code on them (only Hit@1/3/5/MRR do).
+
+Full 21-question judge run:
+
+| Axis | Avg score |
+|------|-----------|
+| Faithfulness | 4.95 |
+| Relevance    | 4.86 |
+| Completeness | 4.86 |
+
+As a sanity check that the judge isn't just rubber-stamping 5s: the one confirmed retrieval MISS
+("classification of information") also produced the lowest scores in the run
+(faithfulness=4, relevance=2, completeness=3) — the judge correctly penalized the answer
+generated from irrelevant retrieved context.
