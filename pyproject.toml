@@ -18,3 +18,9 @@ dependencies = [
 override-dependencies = [
     "hf-xet; sys_platform == 'never'",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.15.21",
+]
