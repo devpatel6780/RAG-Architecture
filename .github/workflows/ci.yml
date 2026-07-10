@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - run: uv sync --group dev
+
+      - run: uv run ruff check .
+
+      - run: uv run pytest tests/ -v
+
+      # Syntax/import smoke check only -- does not execute step1-6/app.py/eval's
+      # live code paths. eval/run_eval.py and eval/judge.py's --judge path require
+      # a local Ollama server (localhost:11434) this hosted runner cannot reach,
+      # so the retrieval eval and LLM-judge stay intentionally local-only.
+      - run: >
+          uv run python -m py_compile
+          step1_load_documents.py step1_load_pdf.py
+          step2_split_chunks.py step3_embed_chunks.py step4_vector_store.py
+          step5_similarity_search.py step6_llm_answer.py app.py
+          eval/run_eval.py eval/compare.py eval/metrics.py eval/judge.py
