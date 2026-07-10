@@ -3,6 +3,7 @@ import json
 import sys
 
 METRICS = ["hit_at_1", "hit_at_3", "hit_at_5", "mrr"]
+JUDGE_METRICS = ["avg_faithfulness", "avg_relevance", "avg_completeness"]
 EPSILON = 1e-9
 
 
@@ -27,6 +28,14 @@ def index_by_key(per_question):
 
 def diff_aggregates(baseline, candidate):
     return {m: candidate["aggregate"][m] - baseline["aggregate"][m] for m in METRICS}
+
+
+def diff_judge(baseline, candidate):
+    base_judge = baseline["aggregate"].get("judge")
+    cand_judge = candidate["aggregate"].get("judge")
+    if not base_judge or not cand_judge:
+        return None
+    return {m: cand_judge[m] - base_judge[m] for m in JUDGE_METRICS}
 
 
 def find_flips(baseline, candidate):
@@ -87,6 +96,19 @@ def main():
         safe_print("\nMISS -> HIT (improvements):")
         for key, field in miss_to_hit:
             safe_print(f"  - [{field}] {key}")
+
+    judge_deltas = diff_judge(baseline, candidate)
+    if judge_deltas:
+        limitation = candidate.get("judge_limitation") or baseline.get("judge_limitation") or ""
+        safe_print(f"\nJudge scores (informational only, not a regression gate) -- {limitation}")
+        safe_print("-" * 60)
+        for m in JUDGE_METRICS:
+            base_val = baseline["aggregate"]["judge"][m]
+            cand_val = candidate["aggregate"]["judge"][m]
+            delta = judge_deltas[m]
+            sign = "+" if delta >= 0 else ""
+            safe_print(f"{m:>18}: {base_val:.2f} -> {cand_val:.2f}  ({sign}{delta:.2f})")
+        safe_print("-" * 60)
 
     regressed = [m for m in METRICS if deltas[m] < -args.threshold - EPSILON]
 
