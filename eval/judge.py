@@ -39,3 +39,22 @@ def parse_judge_response(raw_text):
     for axis in ("faithfulness", "relevance", "completeness"):
         data[axis] = max(1, min(5, int(data[axis])))
     return data
+
+
+def judge_answer(question, answer, context):
+    prompt = JUDGE_PROMPT_TEMPLATE.format(context=context, question=question, answer=answer)
+    raw = call_ollama(prompt, model=JUDGE_MODEL)
+    return parse_judge_response(raw)
+
+
+def aggregate_judge(per_question):
+    scored = [q["judge"] for q in per_question if q.get("judge")]
+    if not scored:
+        return None
+    n = len(scored)
+    return {
+        "num_judged": n,
+        "avg_faithfulness": sum(s["faithfulness"] for s in scored) / n,
+        "avg_relevance": sum(s["relevance"] for s in scored) / n,
+        "avg_completeness": sum(s["completeness"] for s in scored) / n,
+    }
