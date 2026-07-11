@@ -5,7 +5,7 @@ from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from step1_load_documents import load_documents
-from step1_load_pdf import load_pdf
+from step1_load_pdf import extract_title_summary, load_pdf
 from step2_split_chunks import split_documents
 
 PERSIST_DIR = "./chroma_db"
@@ -36,6 +36,18 @@ def main():
     pdf_docs = load_pdf("data/Info_Document.pdf")
     thesis_docs = load_pdf("data/Thesis documentation - Update.pdf")
     chunks = split_documents(text_docs + pdf_docs + thesis_docs)
+
+    # Title/author pulled into their own dense chunk per PDF (when the first
+    # page matches a recognizable title-page layout) -- a raw title page is
+    # diluted by formatting whitespace and degree boilerplate, so it competes
+    # poorly in embedding search against natural questions like "what is the
+    # title of my thesis". Added directly to chunks, bypassing the splitter,
+    # since these are already small and complete.
+    for pdf_docs_set in (pdf_docs, thesis_docs):
+        title_summary = extract_title_summary(pdf_docs_set[0])
+        if title_summary is not None:
+            chunks.append(title_summary)
+
     safe_print(f"Total chunks to store: {len(chunks)}\n")
 
     # --- Embedding model (local, no network call) ---
