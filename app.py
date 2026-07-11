@@ -1,11 +1,15 @@
 import http.client
+import json
 import os
+from pathlib import Path
 
 import streamlit as st
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from step5_similarity_search import PERSIST_DIR, load_vector_store, search
 from step6_llm_answer import MODEL_PATH, OLLAMA_HOST, OLLAMA_PORT, generate_answer
+
+EVAL_RESULTS_DIR = Path("eval/results")
 
 st.set_page_config(page_title="RAG Architecture", page_icon="🔎")
 
@@ -24,6 +28,16 @@ def ollama_is_running():
         return True
     except OSError:
         return False
+
+
+def load_latest_snapshot():
+    if not EVAL_RESULTS_DIR.is_dir():
+        return None
+    snapshots = sorted(EVAL_RESULTS_DIR.glob("eval_*.json"))
+    if not snapshots:
+        return None
+    with open(snapshots[-1], encoding="utf-8") as f:
+        return json.load(f)
 
 
 def render_sources(results):
@@ -49,6 +63,24 @@ if not ollama_is_running():
 vector_store = get_vector_store()
 
 k = st.sidebar.slider("Chunks to retrieve (k)", min_value=1, max_value=10, value=3)
+
+with st.sidebar.expander("System Health (latest eval snapshot)"):
+    snapshot = load_latest_snapshot()
+    if snapshot is None:
+        st.info("No eval snapshot found. Run `uv run python -m eval.run_eval`.")
+    else:
+        agg = snapshot["aggregate"]
+        st.metric("Hit@1", f"{agg['hit_at_1']:.2f}")
+        st.metric("Hit@3", f"{agg['hit_at_3']:.2f}")
+        st.metric("MRR", f"{agg['mrr']:.2f}")
+        if agg.get("judge"):
+            j = agg["judge"]
+            st.caption(
+                f"Judge — faithfulness {j['avg_faithfulness']:.1f} / "
+                f"relevance {j['avg_relevance']:.1f} / "
+                f"completeness {j['avg_completeness']:.1f}"
+            )
+            st.caption(snapshot.get("judge_limitation", ""))
 
 if "history" not in st.session_state:
     st.session_state.history = []
