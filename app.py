@@ -26,6 +26,15 @@ def ollama_is_running():
         return False
 
 
+def render_sources(results):
+    st.markdown("### Sources")
+    for rank, (doc, score) in enumerate(results, start=1):
+        source = doc.metadata.get("source")
+        page = doc.metadata.get("page", "N/A")
+        with st.expander(f"{rank}. {source} (page {page}) — score {score:.4f}"):
+            st.write(doc.page_content)
+
+
 st.title("RAG Architecture")
 st.caption("Ask a question about the indexed documents (`data/sample.txt`, `data/Info_Document.pdf`).")
 
@@ -41,29 +50,38 @@ vector_store = get_vector_store()
 
 k = st.sidebar.slider("Chunks to retrieve (k)", min_value=1, max_value=10, value=3)
 
-question = st.text_input("Your question")
+if "history" not in st.session_state:
+    st.session_state.history = []
+
+for turn in st.session_state.history:
+    with st.chat_message("user"):
+        st.write(turn["question"])
+    with st.chat_message("assistant"):
+        st.write(turn["answer"])
+        render_sources(turn["results"])
+
+question = st.chat_input("Your question")
 
 if question:
-    with st.spinner("Retrieving relevant chunks..."):
-        try:
-            results = search(vector_store, question, k=k)
-        except Exception as e:
-            st.error(f"Retrieval failed: {e}")
-            st.stop()
+    with st.chat_message("user"):
+        st.write(question)
 
-    with st.spinner("Generating answer..."):
-        try:
-            answer = generate_answer(question, results)
-        except (OSError, KeyError, ValueError) as e:
-            st.error(f"Ollama request failed ({e}). Check that `ollama serve` is running and `qwen3:1.7b` is pulled.")
-            st.stop()
+    with st.chat_message("assistant"):
+        with st.spinner("Retrieving relevant chunks..."):
+            try:
+                results = search(vector_store, question, k=k)
+            except Exception as e:
+                st.error(f"Retrieval failed: {e}")
+                st.stop()
 
-    st.markdown("### Answer")
-    st.write(answer)
+        with st.spinner("Generating answer..."):
+            try:
+                answer = generate_answer(question, results)
+            except (OSError, KeyError, ValueError) as e:
+                st.error(f"Ollama request failed ({e}). Check that `ollama serve` is running and `qwen3:1.7b` is pulled.")
+                st.stop()
 
-    st.markdown("### Sources")
-    for rank, (doc, score) in enumerate(results, start=1):
-        source = doc.metadata.get("source")
-        page = doc.metadata.get("page", "N/A")
-        with st.expander(f"{rank}. {source} (page {page}) — score {score:.4f}"):
-            st.write(doc.page_content)
+        st.write(answer)
+        render_sources(results)
+
+    st.session_state.history.append({"question": question, "answer": answer, "results": results})
