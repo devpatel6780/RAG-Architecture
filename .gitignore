@@ -21,3 +21,6 @@ eval/results/
 # Claude Code local config/instructions — not meant for the repo
 .claude/
 CLAUDE.md
+
+# Personal document indexed locally, not meant for the repo
+data/Thesis documentation - Update.pdf

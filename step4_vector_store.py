@@ -34,7 +34,8 @@ def main():
     # --- Load + split ---
     text_docs = load_documents("data/sample.txt")
     pdf_docs = load_pdf("data/Info_Document.pdf")
-    chunks = split_documents(text_docs + pdf_docs)
+    thesis_docs = load_pdf("data/Thesis documentation - Update.pdf")
+    chunks = split_documents(text_docs + pdf_docs + thesis_docs)
     safe_print(f"Total chunks to store: {len(chunks)}\n")
 
     # --- Embedding model (local, no network call) ---

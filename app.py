@@ -50,7 +50,10 @@ def render_sources(results):
 
 
 st.title("RAG Architecture")
-st.caption("Ask a question about the indexed documents (`data/sample.txt`, `data/Info_Document.pdf`).")
+st.caption(
+    "Ask a question about the indexed documents "
+    "(`data/sample.txt`, `data/Info_Document.pdf`, `data/Thesis documentation - Update.pdf`)."
+)
 
 if not os.path.isdir(PERSIST_DIR):
     st.error(f"No vector store found at `{PERSIST_DIR}`. Run `uv run step4_vector_store.py` first.")
