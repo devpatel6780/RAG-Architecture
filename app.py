@@ -45,10 +45,18 @@ question = st.text_input("Your question")
 
 if question:
     with st.spinner("Retrieving relevant chunks..."):
-        results = search(vector_store, question, k=k)
+        try:
+            results = search(vector_store, question, k=k)
+        except Exception as e:
+            st.error(f"Retrieval failed: {e}")
+            st.stop()
 
     with st.spinner("Generating answer..."):
-        answer = generate_answer(question, results)
+        try:
+            answer = generate_answer(question, results)
+        except (OSError, KeyError, ValueError) as e:
+            st.error(f"Ollama request failed ({e}). Check that `ollama serve` is running and `qwen3:1.7b` is pulled.")
+            st.stop()
 
     st.markdown("### Answer")
     st.write(answer)
