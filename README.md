@@ -22,9 +22,13 @@ for the full breakdown, including one documented retrieval weakness kept intenti
 known miss rather than hidden.
 
 **Done since:** LLM-as-judge answer-quality scoring (`eval/judge.py`, `run_eval.py --judge`) —
-see [Evaluation](#evaluation) for scores and the self-judging caveat.
+see [Evaluation](#evaluation) for scores and the self-judging caveat. CI integration
+(`.github/workflows/ci.yml` — ruff + pytest + syntax check, static-only since a hosted runner
+can't reach local Ollama). A UI redesign (`app.py` now has chat history, error handling around
+retrieval/generation failures, and a "System Health" sidebar showing the latest eval snapshot).
 
-**Not yet started:** CI integration, a UI redesign, and a decision on where this gets published.
+**Not yet decided:** where this gets published (public portfolio repo, case-study write-up, or
+kept private).
 
 ---
 
